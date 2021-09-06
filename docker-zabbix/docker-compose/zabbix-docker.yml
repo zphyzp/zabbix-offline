@@ -1,0 +1,90 @@
+version: '3'
+networks:
+  zabbix-net:
+    external: true
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-server-5.2.6
+    security_opt:
+      - seccomp:unconfined
+    restart: always
+    command:
+      --character-set-server=utf8
+      --collation-server=utf8_bin
+      --default-authentication-plugin=mysql_native_password
+      --binlog_expire_logs_seconds=604800
+      --log_error=error.log
+      --slow_query_log=1
+      --slow_query_log_file=slow.log
+      --log_queries_not_using_indexes=1
+      --log_slow_admin_statements=1
+      --log_slow_slave_statements=1
+      --log_throttle_queries_not_using_indexes=10
+      --long_query_time=2
+      --min_examined_row_limit=100  
+    networks:
+      - zabbix-net
+    ports:
+      - '30006:3306'
+    environment:
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+      MYSQL_ROOT_PASSWORD: Capinfo@123
+    volumes:
+      - /data/zabbix_data/mysql:/var/lib/mysql
+   
+  java-gateway:
+    image: hub.jgswy.com/zabbix/zabbix-java-5.2.6:v1
+    container_name: zabbix-java-5.2.6
+    restart: always
+    networks:
+      - zabbix-net
+    depends_on:
+      - mysql
+
+  zabbix-server:
+    image: hub.jgswy.com/zabbix/zabbix-server-5.2.6:v1
+    container_name: zabbix-server-5.2.6
+    environment:
+      DB_SERVER_HOST: mysql-server-5.2.6
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+      MYSQL_ROOT_PASSWORD: Capinfo@123
+      ZBX_JAVAGATEWAY: zabbix-java-5.2.6  
+      ZBX_VMWARECACHESIZE: 1G
+      ZBX_CACHESIZE: 2G
+    ports:
+      - '10051:10051'
+    networks:
+      - zabbix-net
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - mysql
+      - java-gateway
+
+  zabbix-web:
+    image: hub.jgswy.com/zabbix/zabbix-web-5.2.6:v9.2
+    container_name: zabbix-web-5.2.6
+    restart: always
+    environment:
+      DB_SERVER_HOST: mysql-server-5.2.6
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: zabbix
+      MYSQL_ROOT_PASSWORD: Capinfo@123
+      ZBX_SERVER_HOST: zabbix-server-5.2.6
+      PHP_TZ: Asia/Shanghai
+    networks:
+      - zabbix-net
+    ports:
+      - ${WPORT}:8080
+    #volumes:
+    #  - /data/zabbix_data/web:/usr/share/zabbix
+    depends_on:
+      - mysql
+      - java-gateway
+      - zabbix-server
